@@ -1,7 +1,16 @@
-*.onnx
-__pycache__/
-*.pyc
-# File sistem lainnya
-.DS_Store
-.env
+# Virtual environments
+.venv/
 venv/
+.env/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Additional files
+.DS_Store
+*.onnx
