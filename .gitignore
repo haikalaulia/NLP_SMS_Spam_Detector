@@ -1,0 +1,7 @@
+*.onnx
+__pycache__/
+*.pyc
+# File sistem lainnya
+.DS_Store
+.env
+venv/
