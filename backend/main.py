@@ -17,30 +17,25 @@ import os
 import re
 import time
 
-# ── ONNX Runtime (opsional, fallback ke mode mock jika belum ada model) ──
+# ONNX Runtime (opsional, fallback ke mode mock jika belum ada model)
 try:
     import onnxruntime as ort
     ONNX_AVAILABLE = True
 except ImportError:
     ONNX_AVAILABLE = False
 
-# ── Tokenizer dari HuggingFace ──
+# Tokenizer dari HuggingFace
 try:
     from transformers import AutoTokenizer
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
 
-
-# ─────────────────────────────────────────────
 # Konfigurasi
-# ─────────────────────────────────────────────
-
 LABEL_NAMES = ["normal", "promo", "penipuan"]
 LABEL_EMOJI = {"normal": "✅", "promo": "📢", "penipuan": "⚠️"}
 LABEL_COLOR = {"normal": "#22c55e", "promo": "#f59e0b", "penipuan": "#ef4444"}
 MAX_LEN = 128
-
 MODEL_CONFIGS = {
     "indobert": {
         "name": "IndoBERT",
@@ -56,19 +51,15 @@ MODEL_CONFIGS = {
     },
 }
 
-# ─────────────────────────────────────────────
 # Model Loader
-# ─────────────────────────────────────────────
-
 sessions = {}
 tokenizers = {}
-
 
 def load_model(model_key: str):
     """Load ONNX session dan tokenizer, cache di memori."""
     config = MODEL_CONFIGS[model_key]
 
-    # Tokenizer — dibaca dari folder lokal (hasil save_pretrained() saat
+    # Tokenizer - dibaca dari folder lokal (hasil save_pretrained() saat
     # fine-tuning), BUKAN didownload dari HuggingFace Hub. Ini memastikan
     # tokenizer 100% sama dengan yang dipakai saat training/fine-tuning.
     if model_key not in tokenizers and TRANSFORMERS_AVAILABLE:
@@ -100,7 +91,6 @@ def load_model(model_key: str):
         else:
             print(f"[INFO] Model belum ditemukan: {onnx_path} — pakai mode mock untuk model ini.")
 
-
 def preprocess_text(text: str) -> str:
     """Pembersihan teks SMS dasar."""
     text = text.strip()
@@ -108,11 +98,9 @@ def preprocess_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     return text
 
-
 def softmax(logits: np.ndarray) -> np.ndarray:
     e = np.exp(logits - np.max(logits))
     return e / e.sum()
-
 
 def predict_real(model_key: str, text: str) -> dict:
     """Inferensi menggunakan ONNX + tokenizer asli."""
@@ -155,7 +143,6 @@ def predict_real(model_key: str, text: str) -> dict:
         "mode": "onnx",
     }
 
-
 def predict_mock(model_key: str, text: str) -> dict:
     """
     Mock prediction — digunakan saat model ONNX belum tersedia.
@@ -191,17 +178,12 @@ def predict_mock(model_key: str, text: str) -> dict:
         "mode": "mock",
     }
 
-
-# ─────────────────────────────────────────────
 # FastAPI App
-# ─────────────────────────────────────────────
-
 app = FastAPI(
     title="SMS Spam Detector API",
     description="Klasifikasi SMS spam Bahasa Indonesia — IndoBERT vs XLM-RoBERTa",
     version="1.0.0",
 )
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -209,19 +191,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 async def startup_event():
     for key in MODEL_CONFIGS:
         load_model(key)
 
-
-# ── Schema ──
-
+# Schema
 class PredictRequest(BaseModel):
     text: str
     model: Optional[str] = "both"  # "indobert" | "xlmroberta" | "both"
-
 
 class ModelResult(BaseModel):
     label: str
@@ -232,19 +210,15 @@ class ModelResult(BaseModel):
     color: str
     latency_ms: float
 
-
 class PredictResponse(BaseModel):
     text: str
     text_clean: str
     results: dict[str, ModelResult]
 
-
-# ── Endpoints ──
-
+# Endpoints
 @app.get("/")
 def root():
     return {"message": "SMS Spam Detector API", "status": "running"}
-
 
 @app.get("/health")
 def health():
@@ -254,7 +228,6 @@ def health():
         "transformers_available": TRANSFORMERS_AVAILABLE,
         "loaded_models": list(sessions.keys()),
     }
-
 
 @app.get("/models")
 def list_models():
@@ -266,7 +239,6 @@ def list_models():
         }
         for key, cfg in MODEL_CONFIGS.items()
     }
-
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):

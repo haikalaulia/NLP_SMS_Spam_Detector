@@ -3,7 +3,12 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+
+RUN if command -v uv >/dev/null 2>&1; then \
+        uv pip install --system -r requirements.txt; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
