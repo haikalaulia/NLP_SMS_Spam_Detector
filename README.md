@@ -10,15 +10,18 @@ Aplikasi web detektor SMS spam berbahasa Indonesia berbasis **IndoBERT** dan **X
 sms-spam-detector/
 ├── backend/
 │   ├── main.py              ← FastAPI app (API endpoint)
-│   ├── export_onnx.py       ← Script export model PyTorch → ONNX
 │   └── requirements.txt
 ├── frontend/
 │   └── index.html           ← Web UI (buka langsung di browser)
 ├── models/
-│   ├── indobert.onnx        ← (diisi setelah export)
-│   └── xlmroberta.onnx      ← (diisi setelah export)
+│   ├── indobert.onnx               ← model IndoBERT (dari hasil fine-tuning)
+│   ├── xlmroberta.onnx             ← model XLM-RoBERTa (dari hasil fine-tuning)
+│   ├── indobert_tokenizer/         ← tokenizer.json, tokenizer_config.json, config.json
+│   └── xlmroberta_tokenizer/       ← tokenizer.json, tokenizer_config.json, config.json
 └── README.md
 ```
+
+> Model `.onnx` dan tokenizer sudah disiapkan langsung saat proses fine-tuning oleh tim. Backend membaca keduanya dari file/folder lokal — **tidak ada download dari HuggingFace Hub** dan **tidak butuh PyTorch**, cukup ONNX Runtime untuk inferensi.
 
 ---
 
@@ -31,25 +34,18 @@ cd backend
 pip install -r requirements.txt
 ```
 
-### 2. Export model ke ONNX (setelah fine-tuning selesai)
+### 2. Taruh model ONNX dan tokenizer
 
-Jalankan dari folder `backend/`:
+Letakkan file/folder ke `models/` dengan nama tepat seperti ini:
 
-```bash
-# Export IndoBERT
-python export_onnx.py \
-  --model indobert \
-  --checkpoint /path/ke/folder/checkpoint/indobert
-
-# Export XLM-RoBERTa
-python export_onnx.py \
-  --model xlmroberta \
-  --checkpoint /path/ke/folder/checkpoint/xlmroberta
+```
+models/indobert.onnx
+models/xlmroberta.onnx
+models/indobert_tokenizer/        (isi: tokenizer.json, tokenizer_config.json, config.json, dll)
+models/xlmroberta_tokenizer/      (isi: tokenizer.json, tokenizer_config.json, config.json, dll)
 ```
 
-> Hasil export tersimpan otomatis ke `models/indobert.onnx` dan `models/xlmroberta.onnx`.
-
-**Catatan:** Jika model belum siap, backend otomatis berjalan dalam **mode mock** (simulasi prediksi berbasis rule sederhana) sehingga UI tetap bisa didemonstrasikan.
+**Catatan:** Jika model atau tokenizer belum ditaruh, backend otomatis berjalan dalam **mode mock** (simulasi prediksi berbasis rule sederhana) untuk model yang belum lengkap, sehingga UI tetap bisa didemonstrasikan.
 
 ### 3. Jalankan backend
 
@@ -59,18 +55,11 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 API akan berjalan di: `http://localhost:8000`
-
 Dokumentasi otomatis tersedia di: `http://localhost:8000/docs`
 
 ### 4. Buka frontend
 
-Cukup buka file `frontend/index.html` langsung di browser:
-
-```
-Klik dua kali → index.html
-```
-
-Atau via VS Code Live Server, atau:
+Cukup buka file `frontend/index.html` langsung di browser (klik dua kali), atau:
 
 ```bash
 # Dari folder sms-spam-detector/
@@ -83,7 +72,7 @@ python -m http.server 5500 --directory frontend
 ## API Endpoints
 
 | Method | Endpoint   | Deskripsi                              |
-|--------|------------|----------------------------------------|
+|--------|------------|-----------------------------------------|
 | GET    | `/`        | Status API                             |
 | GET    | `/health`  | Cek status + model yang dimuat         |
 | GET    | `/models`  | Daftar model tersedia                  |
@@ -139,12 +128,15 @@ Parameter `model`: `"both"` | `"indobert"` | `"xlmroberta"`
         │
         ├── preprocess_text()   ← bersihkan URL, spasi, dll.
         │
-        ├── AutoTokenizer       ← tokenisasi teks
+        ├── AutoTokenizer       ← tokenisasi teks (didownload otomatis
+        │                          dari HuggingFace, sesuai base model)
         │
         └── ONNX Runtime        ← inferensi model .onnx
                 │
                 └── softmax → label + confidence scores
 ```
+
+**Tentang tokenizer:** tokenizer dibaca dari folder lokal (`models/indobert_tokenizer/`, `models/xlmroberta_tokenizer/`) hasil `save_pretrained()` saat fine-tuning — **tidak didownload dari HuggingFace**, dan **tidak membutuhkan PyTorch**, karena tokenizer dimuat dalam mode numpy (`return_tensors="np"`).
 
 ---
 
@@ -157,29 +149,10 @@ Parameter `model`: `"both"` | `"indobert"` | `"xlmroberta"`
 
 ---
 
-## Deployment ke Hugging Face Spaces (opsional)
-
-1. Buat Space baru → pilih **Gradio** atau **Static** (untuk HTML murni)
-2. Upload semua file
-3. Untuk Space dengan backend FastAPI, gunakan template **Docker**:
-
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY backend/requirements.txt .
-RUN pip install -r requirements.txt
-COPY backend/ ./backend/
-COPY models/ ./models/
-COPY frontend/ ./frontend/
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "7860"]
-```
-
----
-
 ## Tim Pengembang
 
-Proyek Akhir — SINF6054 Pemrosesan Bahasa Alami Kelas A  
-Kelompok 14  
-- Tinsari Rauhana (2308107010038)  
-- Naufal Hanif (2308107010025)  
+Proyek Akhir — SINF6054 Pemrosesan Bahasa Alami Kelas A
+Kelompok 14
+- Tinsari Rauhana (2308107010038)
+- Naufal Hanif (2308107010025)
 - Haikal Aulia (2308107010063)

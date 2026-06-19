@@ -1,6 +1,11 @@
 """
 SMS Spam Detector — FastAPI Backend
 Menjalankan inferensi ONNX untuk IndoBERT dan XLM-RoBERTa
+
+Model .onnx diasumsikan sudah diexport sebelumnya (saat fine-tuning)
+dan ditaruh di folder ../models/ dengan nama:
+  - indobert.onnx
+  - xlmroberta.onnx
 """
 
 from fastapi import FastAPI, HTTPException
@@ -41,13 +46,13 @@ MODEL_CONFIGS = {
         "name": "IndoBERT",
         "description": "indobenchmark/indobert-base-p1",
         "onnx_path": os.path.join(os.path.dirname(__file__), "../models/indobert.onnx"),
-        "tokenizer_name": "indobenchmark/indobert-base-p1",
+        "tokenizer_path": os.path.join(os.path.dirname(__file__), "../models/indobert_tokenizer"),
     },
     "xlmroberta": {
         "name": "XLM-RoBERTa",
         "description": "xlm-roberta-base",
         "onnx_path": os.path.join(os.path.dirname(__file__), "../models/xlmroberta.onnx"),
-        "tokenizer_name": "xlm-roberta-base",
+        "tokenizer_path": os.path.join(os.path.dirname(__file__), "../models/xlmroberta_tokenizer"),
     },
 }
 
@@ -63,12 +68,19 @@ def load_model(model_key: str):
     """Load ONNX session dan tokenizer, cache di memori."""
     config = MODEL_CONFIGS[model_key]
 
-    # Tokenizer
+    # Tokenizer — dibaca dari folder lokal (hasil save_pretrained() saat
+    # fine-tuning), BUKAN didownload dari HuggingFace Hub. Ini memastikan
+    # tokenizer 100% sama dengan yang dipakai saat training/fine-tuning.
     if model_key not in tokenizers and TRANSFORMERS_AVAILABLE:
-        try:
-            tokenizers[model_key] = AutoTokenizer.from_pretrained(config["tokenizer_name"])
-        except Exception as e:
-            print(f"[WARN] Gagal load tokenizer {model_key}: {e}")
+        tokenizer_path = config["tokenizer_path"]
+        if os.path.isdir(tokenizer_path):
+            try:
+                tokenizers[model_key] = AutoTokenizer.from_pretrained(tokenizer_path)
+                print(f"[OK] Tokenizer loaded (lokal): {model_key} ({tokenizer_path})")
+            except Exception as e:
+                print(f"[WARN] Gagal load tokenizer lokal {model_key}: {e}")
+        else:
+            print(f"[INFO] Folder tokenizer belum ditemukan: {tokenizer_path}")
 
     # ONNX Session
     if model_key not in sessions and ONNX_AVAILABLE:
@@ -82,11 +94,11 @@ def load_model(model_key: str):
                     sess_options=sess_options,
                     providers=["CPUExecutionProvider"],
                 )
-                print(f"[OK] ONNX model loaded: {model_key}")
+                print(f"[OK] ONNX model loaded: {model_key} ({onnx_path})")
             except Exception as e:
                 print(f"[WARN] Gagal load ONNX {model_key}: {e}")
         else:
-            print(f"[INFO] Model file belum ada: {onnx_path}")
+            print(f"[INFO] Model belum ditemukan: {onnx_path} — pakai mode mock untuk model ini.")
 
 
 def preprocess_text(text: str) -> str:
@@ -125,6 +137,12 @@ def predict_real(model_key: str, text: str) -> dict:
     if "token_type_ids" in encoding:
         inputs["token_type_ids"] = encoding["token_type_ids"].astype(np.int64)
 
+    # Beberapa export ONNX hanya mendefinisikan input_ids & attention_mask
+    # (tanpa token_type_ids), jadi kita cocokkan dengan input yang memang
+    # diharapkan oleh graph ONNX-nya.
+    expected_inputs = {i.name for i in session.get_inputs()}
+    inputs = {k: v for k, v in inputs.items() if k in expected_inputs}
+
     outputs = session.run(None, inputs)
     logits = outputs[0][0]
     probs = softmax(logits)
@@ -147,7 +165,7 @@ def predict_mock(model_key: str, text: str) -> dict:
 
     PENIPUAN_KEYWORDS = ["menang", "hadiah", "transfer", "rekening", "pin", "otp",
                          "klik", "selamat", "jackpot", "undian", "verifikasi", "pinjaman",
-                         "kode", "konfirmasi", "password", "dompet", "dana", "ovo"]
+                         "kode", "konfirmasi", "password", "dompet", "dana", "ovo", "klaim"]
     PROMO_KEYWORDS = ["promo", "diskon", "gratis", "bonus", "kuota", "paket",
                       "voucher", "cashback", "telkomsel", "indosat", "xl", "axis",
                       "tri", "beli", "harga", "murah", "spesial", "hemat"]
@@ -155,7 +173,6 @@ def predict_mock(model_key: str, text: str) -> dict:
     penipuan_score = sum(k in text_lower for k in PENIPUAN_KEYWORDS) * 0.15
     promo_score = sum(k in text_lower for k in PROMO_KEYWORDS) * 0.15
 
-    # Sedikit variasi antar model
     np.random.seed(hash(text + model_key) % (2**31))
     noise = np.random.dirichlet([1, 1, 1]) * 0.08
 
@@ -193,7 +210,6 @@ app.add_middleware(
 )
 
 
-# Load semua model saat startup
 @app.on_event("startup")
 async def startup_event():
     for key in MODEL_CONFIGS:
@@ -259,7 +275,6 @@ def predict(req: PredictRequest):
 
     text_clean = preprocess_text(req.text)
 
-    # Tentukan model mana yang dijalankan
     if req.model == "both":
         model_keys = list(MODEL_CONFIGS.keys())
     elif req.model in MODEL_CONFIGS:
