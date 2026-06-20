@@ -25,6 +25,56 @@ sms-spam-detector/
 
 ---
 
+## Sumber Model
+
+Model hasil fine-tuning **tidak disertakan langsung** di folder `models/` repo ini (karena ukurannya besar, ratusan MB per model). Model dan tokenizer diambil dari branch berikut:
+
+**Repo:** [`tinsarirauhana/Kelompok14_FinalNLP_A`](https://github.com/tinsarirauhana/Kelompok14_FinalNLP_A.git)
+**Branch:** `feat/xlm-roberta`
+
+Struktur folder model di branch tersebut:
+
+```
+Kelompok14_FinalNLP_A/
+└── model/
+    ├── indobert/
+    │   ├── config.json
+    │   ├── model.onnx              ← rename → indobert.onnx
+    │   ├── model.safetensors       (tidak dipakai, abaikan)
+    │   ├── tokenizer.json
+    │   └── tokenizer_config.json
+    └── xlmroberta/
+        ├── config.json
+        ├── model.onnx              ← rename → xlmroberta.onnx
+        ├── model.safetensors       (tidak dipakai, abaikan)
+        ├── tokenizer.json
+        └── tokenizer_config.json
+```
+
+### Cara mengambil model
+
+Karena file `.onnx` dikelola dengan **Git LFS**, jangan download ZIP langsung dari GitHub (file LFS tidak akan ikut terunduh, hanya berupa file pointer berukuran kecil). Gunakan `git clone`:
+
+```bash
+git clone --branch feat/xlm-roberta https://github.com/tinsarirauhana/Kelompok14_FinalNLP_A.git
+cd Kelompok14_FinalNLP_A
+git lfs install
+git lfs pull
+```
+
+Setelah `model.onnx` terunduh penuh (sekitar 450–500 MB per model, bukan beberapa KB), pindahkan ke proyek ini sesuai struktur berikut:
+
+| Sumber (dari repo di atas) | Tujuan (di proyek ini) |
+|---|---|
+| `model/indobert/model.onnx` | `models/indobert.onnx` |
+| `model/indobert/tokenizer.json`, `tokenizer_config.json`, `config.json` | `models/indobert_tokenizer/` |
+| `model/xlmroberta/model.onnx` | `models/xlmroberta.onnx` |
+| `model/xlmroberta/tokenizer.json`, `tokenizer_config.json`, `config.json` | `models/xlmroberta_tokenizer/` |
+
+> File `model.safetensors` tidak perlu dipindahkan — itu format PyTorch yang tidak dipakai backend ini.
+
+---
+
 ## Setup & Cara Menjalankan
 
 ### 1. Install dependensi backend
@@ -128,10 +178,10 @@ Parameter `model`: `"both"` | `"indobert"` | `"xlmroberta"`
         │
         ├── preprocess_text()   ← bersihkan URL, spasi, dll.
         │
-        ├── AutoTokenizer       ← tokenisasi teks (didownload otomatis
-        │                          dari HuggingFace, sesuai base model)
+        ├── AutoTokenizer       ← tokenisasi teks (dibaca dari folder
+        │                          lokal, lihat bagian "Sumber Model")
         │
-        └── ONNX Runtime        ← inferensi model .onnx
+        └── ONNX Runtime        ← inferensi model .onnx (file lokal)
                 │
                 └── softmax → label + confidence scores
 ```
